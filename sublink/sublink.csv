@@ -1,0 +1,16 @@
+"Id";"Designator";"Package";"Quantity";"Designation";"Supplier and ref";
+1;"D1,D2,D3";"LED_0805_2012Metric_Pad1.15x1.40mm_HandSolder";3;"LED";;;
+2;"D13,D9,D4,D17,D10,D21,D6,D7,D12,D5,D16,D19,D11,D15,D14,D18,D8,D20";"LED_0805_2012Metric_Pad1.15x1.40mm_HandSolder";18;"LED_Small";;;
+3;"H2,H3,H1";"MountingHole_2.2mm_M2";3;"MountingHole";;;
+4;"R9";"R_0805_2012Metric_Pad1.20x1.40mm_HandSolder";1;"10k";;;
+5;"SW2,SW1,SW3";"SW_SPST_Omron_B3FS-100xP";3;"SW_Push";;;
+6;"D23";"D_SOD-323_HandSoldering";1;"BAS21HT1G";;;
+7;"U2";"OKY3402";1;"OKY3402";;;
+8;"J1";"Harwin_M20-89004xx_1x04_P2.54mm_Horizontal";1;"ZL315-4SGH";;;
+9;"R6,R2,R5,R1,R8,R3,R4,R7";"R_0805_2012Metric_Pad1.20x1.40mm_HandSolder";8;"R_Small";;;
+10;"C1";"C_0805_2012Metric_Pad1.18x1.45mm_HandSolder";1;"100n";;;
+11;"BT1";"R_1206_3216Metric_Pad1.30x1.75mm_HandSolder";1;"3V7";;;
+12;"D22";"D_SOD-323_HandSoldering";1;"DNP";;;
+13;"U3";"JS202011";1;"JS202011";;;
+14;"Q1";"SOT-23";1;"Q_PMOS_GSD";;;
+15;"U1";"SOIC-14_3.9x8.7mm_P1.27mm";1;"ATtiny414-SS";;;

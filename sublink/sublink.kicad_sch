@@ -1150,11 +1150,6 @@
     (uuid f38f79db-25a2-4abe-a686-aee20bffc9e5)
   )
 
-  (bus_entry (at 179.705 51.435) (size 2.54 2.54)
-    (stroke (width 0) (type default) (color 0 0 0 0))
-    (uuid d01d51b1-d84f-4016-803c-b9c1c06df2db)
-  )
-
   (wire (pts (xy 177.8 60.96) (xy 177.8 64.77))
     (stroke (width 0) (type default) (color 0 0 0 0))
     (uuid 00898750-b8e5-4d80-8a44-e53baf99fb2f)
