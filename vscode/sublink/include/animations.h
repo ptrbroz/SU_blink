@@ -17,8 +17,9 @@ void enterAnimation(animType anim);
 //Called on pressing the middle button, begins modification of active animation, or switches to next value to modify, or leaves mod mode.
 void handleModButton();
 
-//Called on pressing right or left button. @value is intended increment / decrement (+-1 on single press, may also be higher if desired)
-void modifyAnimation(int value);
+//Called on pressing right or left button. @value is intended increment / decrement (+-1 on single press, may also be higher if desired) currently selected property of animation
+//or to switch to next / previous animation
+void handleModify(int value);
 
 
 

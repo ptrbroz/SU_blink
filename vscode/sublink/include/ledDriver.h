@@ -5,7 +5,7 @@
 #include <Arduino.h>
 
 #define CIRCLE_LED_COUNT 18
-#define CIRCLE_PWM_DEPTH  5
+#define CIRCLE_PWM_DEPTH  6
 
 #define L0 4
 #define L1 5

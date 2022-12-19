@@ -6,8 +6,6 @@
 #define HIGH 1
 #define Z 2
 
-#define CIRCLE_LED_COUNT 18
-#define CIRCLE_PWM_DEPTH 5
 const uint8_t portOutSequence[CIRCLE_LED_COUNT] = {
     1 << L4, //first LED = D16
     1 << L3,

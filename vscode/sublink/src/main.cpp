@@ -28,14 +28,47 @@ void setup(){
   TCA0_SINGLE_PER = TIMER_TOP; //set top value
   PORTB_DIR |= (0x1|0x2|0x4); //set PB0 1 2 as output -- pwm pins
 
+  //buttons
+  PORTA_PIN1CTRL = 0x80 | 0x8; //pullup enable, invert
+  PORTA_PIN2CTRL = 0x80 | 0x8; //pullup enable
+  PORTA_PIN3CTRL = 0x80 | 0x8; //pullup enable
+
+
 }
 
 void loop(){
 
+  uint8_t buttonStatePreviousLoop = 0;
+  uint8_t buttonStateLast = 0;
+  uint16_t buttonDebounceCounter = 0;
+
+  const uint16_t debounceVal = 2000;
 
   enterAnimation(runningDot);
 
   while(1){
+
+    buttonDebounceCounter += TCA0_SINGLE_CNT;
+
+    uint8_t buttonStateNow = (PORTA_IN & (0x7 << 1));
+    if(buttonStateNow != buttonStatePreviousLoop){
+      buttonDebounceCounter = 0;
+    }
+    buttonStatePreviousLoop = buttonStateNow;
+
+    if(buttonDebounceCounter > debounceVal){
+      if((!(buttonStateLast & 0x2)) && (buttonStateNow & 0x2)){ //butt 1 press - right
+        handleModify(1);
+      }
+      else if((!(buttonStateLast & 0x4)) && (buttonStateNow & 0x4)){ //butt 1 press - mid 
+        handleModButton();
+      }
+      else if(!((buttonStateLast & 0x8)) && (buttonStateNow & 0x8)){ //butt 1 press - left
+        handleModify(-1);
+      }
+      buttonStateLast  = buttonStateNow;
+      buttonDebounceCounter = 0;
+    }
 
 
     animate();
