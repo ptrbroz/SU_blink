@@ -4,7 +4,7 @@
 #include <animations.h>
 #include <common.h>
 
-animType activeAnimation = none;
+uint8_t activeAnimation = 0;
 uint16_t accumulatedTicks = 0; //var to hold ticks of timer A, which counts from 0 to TIMER_TOP @ 1MHz
 uint16_t accumulatedMs = 0; 
 uint16_t lastCounterVal = 0;
@@ -14,20 +14,20 @@ uint8_t modState = 0; //for holding state of modification (which variable, if an
 
 volatile uint16_t msPerFrame = 100;
 
-const void animateNothing(int first, int mod, int delta);
 const void animateRunningDot(int first, int mod, int delta);
 const void animatePendulumClock(int firts, int mod, int delta);
+const void animatePulsingLight(int first, int mod, int delta);
 
 //array of animation functions. When 1st argument is true, this is an inicialization call. When 2nd argument is true, this is a modButton call.
 //When 3rd argument is nonzero, this is a variable modification by value of 3rd argument.
 const void (*ap[]) (int, int, int) = {
-    animateNothing,
     animateRunningDot,
-    animatePendulumClock
+    animatePendulumClock,
+    animatePulsingLight
 };
 
 
-void enterAnimation(animType anim){
+void enterAnimation(uint8_t anim){
     activeAnimation = anim;
     accumulatedMs = 0;
     accumulatedTicks = 0;
@@ -65,8 +65,22 @@ void handleModButton(){
 
 void handleModify(int value){
     if(!modState){
-        //change active animation
-        //todo
+        const uint8_t animCount = sizeof(ap)/sizeof(ap[0]);
+        if(value > 0){
+            activeAnimation++;
+            if(activeAnimation >= animCount){
+                activeAnimation = 0;
+            }
+        }
+        else{
+            if(activeAnimation == 0){
+                activeAnimation = animCount - 1;
+            }
+            else{
+                activeAnimation -= 1;
+            }
+        }
+        enterAnimation(activeAnimation);
     }
     else{
         //allow active animation to modify its variable
@@ -137,8 +151,8 @@ const void animateRunningDot(int init, int mod, int delta){
     if(modState && delta != 0){
         if(modState == 4){
             int newMs = msPerFrame + 10*delta;
-            if(newMs < 0){
-                msPerFrame = 1;
+            if(newMs < 10){
+                msPerFrame = 10;
             }
             else{
                 msPerFrame = newMs;
@@ -244,9 +258,8 @@ const void animatePendulumClock(int first, int mod, int delta){
     const uint8_t cosLUT[26] = {0, 0, 0, 0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15, 16, 18, 20, 21, 23, 24, 26};
     const uint8_t lutMax = sizeof(cosLUT) - 1;
 
-    if(first||mod){
-        //no modifications allowed on this, so just reset on mod 
-        msPerFrame = 10;
+    if(first){
+        msPerFrame = 20;
         index = 0;
         direction = 1;
         quarterSeconds = 0;
@@ -254,8 +267,24 @@ const void animatePendulumClock(int first, int mod, int delta){
         clockFaceMultiples = 0;
         return;
     }
-    if(delta != 0){
-        //should not happen
+
+    if(mod){
+        if(modState == 0){
+            modState = 1;
+        }
+        else{
+            modState = 0;
+        }
+        return;
+    }
+
+    if(delta != 0 && modState){
+        if(delta > 0){
+            msPerFrame = 20;
+        }
+        else{
+            msPerFrame = 10;
+        }
         return;
     }
 
@@ -266,6 +295,7 @@ const void animatePendulumClock(int first, int mod, int delta){
     //if control reached here, 10ms has elapsed since last time
     int sd = (direction) ? 1 : -1;
     int nextIndex = index + sd;
+    uint8_t incrementSeconds = 0;
 
     if(nextIndex == 0){
         //PORTB_OUT |= 0x01;
@@ -280,21 +310,26 @@ const void animatePendulumClock(int first, int mod, int delta){
         //PORTB_OUT |= 0x01;
         direction = !direction;
         quarterSeconds++;
-        if(quarterSeconds == 1){
-            if(clockFaceSeconds == 0xff){
-                clockFaceSeconds = 0;
-                if(clockFaceMultiples == 3){
-                    clockFaceMultiples = 0;
-                }
-                else{
-                    clockFaceMultiples++;
-                }
-            }
-            else{
-                clockFaceSeconds++;
-            }
+        if(quarterSeconds == 1 || (msPerFrame == 20)){
+            incrementSeconds = 1;
         }
     }
+
+    if(incrementSeconds){
+        if(clockFaceSeconds == 0xff){
+            clockFaceSeconds = 0;
+            if(clockFaceMultiples == 3){
+                clockFaceMultiples = 0;
+            }
+            else{
+                clockFaceMultiples++;
+            }
+        }
+        else{
+            clockFaceSeconds++;
+        }
+    }
+
     index = (uint8_t) nextIndex;
 
     uint8_t position = cosLUT[index];
@@ -377,25 +412,104 @@ const void animatePendulumClock(int first, int mod, int delta){
         }
     }
 
-    if(clockFaceMultiples > 0){
-        PWM_CMP_LEFT = TIMER_TOP/60;
-    }
-    else{
-        PWM_CMP_LEFT = 0;
-    }
-    
-    if(clockFaceMultiples > 1){
-        PWM_CMP_RIGHT = TIMER_TOP/60;
-    }
-    else{
-        PWM_CMP_RIGHT = 0;
-    }
+    if(modState == 0){
+        if(clockFaceMultiples > 0){
+            PWM_CMP_LEFT = TIMER_TOP/60;
+        }
+        else{
+            PWM_CMP_LEFT = 0;
+        }
+        
+        if(clockFaceMultiples > 1){
+            PWM_CMP_RIGHT = TIMER_TOP/60;
+        }
+        else{
+            PWM_CMP_RIGHT = 0;
+        }
 
-    if(clockFaceMultiples > 2){
-        PWM_CMP_TOP = TIMER_TOP/60;
+        if(clockFaceMultiples > 2){
+            PWM_CMP_TOP = TIMER_TOP/60;
+        }
+        else{
+            PWM_CMP_TOP = 0;
+        }
     }
     else{
-        PWM_CMP_TOP = 0;
+        pwmsOnOff(1,1,1);
     }
 
 }
+#undef clockFaceSeconds
+#undef clockFaceMultiples 
+#undef quarterSeconds 
+#undef direction 
+#undef index 
+
+
+
+#define currentIntensity animVars[0]
+#define rising animVars[1]
+#define goToZero animVars[2]
+const void animatePulsingLight(int first, int mod, int delta){
+    if(first){
+        msPerFrame = 200;
+        currentIntensity = 1;
+        rising = 1;
+        goToZero = 0;
+        return;
+    }
+    if(mod){
+        if(modState == 3){
+            modState = 0;
+        }
+        else{
+            modState++;
+        }
+        return;
+    }
+    if(delta != 0){
+        if(modState == 1){
+            goToZero = !goToZero;
+        }
+        else if(modState == 2){
+            int newMs = msPerFrame + 10*delta;
+            if(newMs < 10){
+                newMs = 10;
+            }
+            msPerFrame = newMs;
+        }
+        return;
+    }
+
+    if(rising){
+        currentIntensity++;
+        if(currentIntensity >= CIRCLE_PWM_DEPTH){
+            rising = 0;
+        }
+    }
+    else{
+        currentIntensity--;
+        if(currentIntensity <= ((goToZero) ? 0 : 1)){
+            rising = 1;
+        }
+    }
+
+    //draw circle
+    clearBuffer();
+    for(int i = 0; i < CIRCLE_LED_COUNT; i++){
+        for(int j = 0; j < currentIntensity; j++){
+            circleEnableBuffer[i*CIRCLE_PWM_DEPTH + j] = portEnableSequence[i];
+        }
+    }
+
+    //draw corners
+    if(modState){
+        pwmsOnOff(1,(modState > 1),(modState > 1));
+    }
+    else{
+        PWM_CMP_LEFT = PWM_CMP_RIGHT = PWM_CMP_TOP = currentIntensity*TIMER_TOP/60;
+    }
+
+}
+
+

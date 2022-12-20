@@ -13,9 +13,9 @@
 #define L3 6
 #define L4 7
 
-#define PWM_CMP_TOP     TCA0_SINGLE_CMP0
-#define PWM_CMP_LEFT    TCA0_SINGLE_CMP1
-#define PWM_CMP_RIGHT   TCA0_SINGLE_CMP2
+#define PWM_CMP_TOP     TCA0_SINGLE_CMP0BUF
+#define PWM_CMP_LEFT    TCA0_SINGLE_CMP1BUF
+#define PWM_CMP_RIGHT   TCA0_SINGLE_CMP2BUF
 
 extern const uint8_t portOutSequence[CIRCLE_LED_COUNT];
 extern const uint8_t portEnableSequence[CIRCLE_LED_COUNT];

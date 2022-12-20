@@ -46,7 +46,7 @@ void loop(){
 
   const uint16_t debounceVal = 10000;
 
-  enterAnimation(pendulumClock);
+  enterAnimation(2);
 
   while(1){
     buttonDebounceCounter += TCA0_SINGLE_CNT;
@@ -59,13 +59,13 @@ void loop(){
 
     if(buttonDebounceCounter > debounceVal){
       if((!(buttonStateLast & 0x2)) && (buttonStateNow & 0x2)){ //butt 1 press - right
-        handleModify(1);
+        handleModify(-1);
       }
       else if((!(buttonStateLast & 0x4)) && (buttonStateNow & 0x4)){ //butt 1 press - mid 
         handleModButton();
       }
       else if(!((buttonStateLast & 0x8)) && (buttonStateNow & 0x8)){ //butt 1 press - left
-        handleModify(-1);
+        handleModify(1);
       }
       buttonStateLast  = buttonStateNow;
       buttonDebounceCounter = 0;
