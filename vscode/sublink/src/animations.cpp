@@ -15,13 +15,15 @@ uint8_t modState = 0; //for holding state of modification (which variable, if an
 volatile uint16_t msPerFrame = 100;
 
 const void animateNothing(int first, int mod, int delta);
-const void animateRunningDot(int first, int mod, int delta);;
+const void animateRunningDot(int first, int mod, int delta);
+const void animatePendulumClock(int firts, int mod, int delta);
 
 //array of animation functions. When 1st argument is true, this is an inicialization call. When 2nd argument is true, this is a modButton call.
 //When 3rd argument is nonzero, this is a variable modification by value of 3rd argument.
 const void (*ap[]) (int, int, int) = {
     animateNothing,
-    animateRunningDot
+    animateRunningDot,
+    animatePendulumClock
 };
 
 
@@ -103,6 +105,8 @@ const void animateNothing(int init, int mod, int delta){
     PWM_CMP_TOP = 0;
     PWM_CMP_RIGHT = 0;
 }
+
+
 
 #define position animVars[0]
 #define tailLen animVars[1]
@@ -201,7 +205,7 @@ const void animateRunningDot(int init, int mod, int delta){
     else{
         //show pwm depending on position of dot
         uint8_t oldPos = position;
-        uint16_t pwmFraction = ((uint8_t)(TIMER_TOP/60)) * ((oldPos%6) + 1 );
+        uint16_t pwmFraction = ((uint8_t)(TIMER_TOP/(18*6))) * ((oldPos%6) + 1 );
 
         if(oldPos < 6){
             PWM_CMP_LEFT = pwmFraction;
@@ -230,6 +234,168 @@ const void animateRunningDot(int init, int mod, int delta){
 
 
 
+#define clockFaceSeconds animVars[0]
+#define clockFaceMultiples animVars[1]
+#define quarterSeconds animVars[2]
+#define direction animVars[3]
+#define index animVars[4]
+const void animatePendulumClock(int first, int mod, int delta){
+    //quantized LUT from pi/2 down to 0, covering 1/4 second
+    const uint8_t cosLUT[26] = {0, 0, 0, 0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15, 16, 18, 20, 21, 23, 24, 26};
+    const uint8_t lutMax = sizeof(cosLUT) - 1;
+
+    if(first||mod){
+        //no modifications allowed on this, so just reset on mod 
+        msPerFrame = 10;
+        index = 0;
+        direction = 1;
+        quarterSeconds = 0;
+        clockFaceSeconds = 0;
+        clockFaceMultiples = 0;
+        return;
+    }
+    if(delta != 0){
+        //should not happen
+        return;
+    }
 
 
+    //PORTB_OUT |= 0x1;
 
+
+    //if control reached here, 10ms has elapsed since last time
+    int sd = (direction) ? 1 : -1;
+    int nextIndex = index + sd;
+
+    if(nextIndex == 0){
+        //PORTB_OUT |= 0x01;
+        direction = !direction;
+        quarterSeconds++;
+        if(quarterSeconds >= 4){
+            quarterSeconds = 0;
+            //dont increment seconds here, rather do it on edge between 0 and 1 qs -- at end of downswing
+        }
+    }
+    else if(nextIndex == lutMax){
+        //PORTB_OUT |= 0x01;
+        direction = !direction;
+        quarterSeconds++;
+        if(quarterSeconds == 1){
+            if(clockFaceSeconds == 0xff){
+                clockFaceSeconds = 0;
+                if(clockFaceMultiples == 3){
+                    clockFaceMultiples = 0;
+                }
+                else{
+                    clockFaceMultiples++;
+                }
+            }
+            else{
+                clockFaceSeconds++;
+            }
+        }
+    }
+    index = (uint8_t) nextIndex;
+
+    uint8_t position = cosLUT[index];
+    uint8_t m = position%6;
+    uint8_t sourceIntensity;
+    uint8_t sinkIntensity;
+
+    if(direction == 1){
+        sourceIntensity = 6 - m;
+        sinkIntensity = m;
+    }
+    else if(direction == 0){
+        sourceIntensity = m;
+        sinkIntensity = 6 - m;
+    }
+
+    //determine source, sink led positions
+    const uint8_t pStartIndex = 4;
+    const uint8_t pEndIndex = 13;
+
+    uint8_t sourceIndex;
+    uint8_t sinkIndex;
+
+    if(quarterSeconds == 0){
+        //downswing from 4 to 0
+        sourceIndex = pStartIndex - (position / 6);
+        if(sourceIndex == 0){
+            sinkIndex = CIRCLE_LED_COUNT-1;
+        }
+        else{
+            sinkIndex = sourceIndex - 1;
+        }
+    }
+    else if(quarterSeconds == 1){
+        //upswing from 17 to 13
+        sourceIndex = pEndIndex + (position / 6) + 1;
+        if(sourceIndex == CIRCLE_LED_COUNT){
+            sourceIndex = 0;
+            sinkIndex = CIRCLE_LED_COUNT - 1;
+        }
+        else{
+            sinkIndex = sourceIndex - 1;
+        }
+    }
+    else if(quarterSeconds == 2){
+        //downswing from 13 to 17
+        sourceIndex = (CIRCLE_LED_COUNT - 1) + (position/6 - 4);
+        if(sourceIndex == CIRCLE_LED_COUNT - 1){
+            sinkIndex = 0;
+        }
+        else{
+            sinkIndex = sourceIndex + 1;
+        }
+    }
+    else if(quarterSeconds == 3){
+        //upswing from 0 to 4
+        sinkIndex = pStartIndex - position/6;
+        if(sinkIndex == 0){
+            sourceIndex = CIRCLE_LED_COUNT - 1;
+        }
+        else{
+            sourceIndex = sinkIndex - 1;
+        }
+    }
+
+    clearBuffer();
+    for(int i = 0; i < sourceIntensity; i++){
+        circleEnableBuffer[sourceIndex*CIRCLE_PWM_DEPTH + i] = portEnableSequence[sourceIndex];
+    }
+    for(int i = 0; i < sinkIntensity; i++){
+        circleEnableBuffer[sinkIndex*CIRCLE_PWM_DEPTH + i] = portEnableSequence[sinkIndex];
+    }
+
+    //print clockface
+    const uint8_t binaryLedStart = pEndIndex - 1;
+
+    for(int i = 0; i<8; i++){
+        if(clockFaceSeconds & (0x1 << i)){
+            circleEnableBuffer[(binaryLedStart - i)*CIRCLE_PWM_DEPTH] = portEnableSequence[binaryLedStart-i];
+        }
+    }
+
+    if(clockFaceMultiples > 0){
+        PWM_CMP_LEFT = TIMER_TOP/60;
+    }
+    else{
+        PWM_CMP_LEFT = 0;
+    }
+    
+    if(clockFaceMultiples > 1){
+        PWM_CMP_RIGHT = TIMER_TOP/60;
+    }
+    else{
+        PWM_CMP_RIGHT = 0;
+    }
+
+    if(clockFaceMultiples > 2){
+        PWM_CMP_TOP = TIMER_TOP/60;
+    }
+    else{
+        PWM_CMP_TOP = 0;
+    }
+
+}

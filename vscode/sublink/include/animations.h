@@ -3,7 +3,8 @@
 
 enum animType{
     none,
-    runningDot
+    runningDot,
+    pendulumClock
 };
 
 volatile extern uint16_t msPerFrame;
