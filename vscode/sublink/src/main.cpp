@@ -46,7 +46,7 @@ void loop(){
 
   const uint16_t debounceVal = 10000;
 
-  enterAnimation(2);
+  enterAnimation(3);
 
   while(1){
     buttonDebounceCounter += TCA0_SINGLE_CNT;

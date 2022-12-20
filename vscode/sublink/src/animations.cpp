@@ -17,13 +17,15 @@ volatile uint16_t msPerFrame = 100;
 const void animateRunningDot(int first, int mod, int delta);
 const void animatePendulumClock(int firts, int mod, int delta);
 const void animatePulsingLight(int first, int mod, int delta);
+const void animateStackingDots(int first, int mod, int delta);
 
 //array of animation functions. When 1st argument is true, this is an inicialization call. When 2nd argument is true, this is a modButton call.
 //When 3rd argument is nonzero, this is a variable modification by value of 3rd argument.
 const void (*ap[]) (int, int, int) = {
     animateRunningDot,
     animatePendulumClock,
-    animatePulsingLight
+    animatePulsingLight,
+    animateStackingDots
 };
 
 
@@ -511,5 +513,83 @@ const void animatePulsingLight(int first, int mod, int delta){
     }
 
 }
+#undef currentIntensity 
+#undef rising 
+#undef goToZero 
 
 
+
+
+#define dotsPlaced animVars[0]
+#define thisDotPos animVars[1]
+#define direction animVars[2]
+#define fadeoutCounter animVars[3]
+#define currentBrightness animVars[4]
+const void animateStackingDots(int first, int mod, int delta){
+    if(first){
+        dotsPlaced = 0;
+        thisDotPos = 0;
+        direction = 0;
+        fadeoutCounter = 0;
+        currentBrightness = CIRCLE_PWM_DEPTH - 1;
+        PWM_CMP_LEFT = PWM_CMP_RIGHT = PWM_CMP_TOP = 0;
+        msPerFrame = 50;
+    }
+    //todo mod
+    
+    //draw first
+    clearBuffer();
+    for(int i = 0; i<dotsPlaced; i++){
+        uint8_t ledIndex = (direction) ? (CIRCLE_LED_COUNT-1-i) : (i);
+        for(int j = 0; j<currentBrightness; j++){
+            circleEnableBuffer[CIRCLE_PWM_DEPTH*ledIndex + j] = portEnableSequence[ledIndex];
+        }
+    }
+
+    if(dotsPlaced < CIRCLE_LED_COUNT - 1){
+        for(int j = 0; j<CIRCLE_PWM_DEPTH; j++){
+            circleEnableBuffer[CIRCLE_PWM_DEPTH*thisDotPos+ j] = portEnableSequence[thisDotPos];
+        }
+    }
+
+    uint16_t pwmFrac = currentBrightness*TIMER_TOP/60;
+    if(dotsPlaced > 11) PWM_CMP_TOP = pwmFrac;
+    if(direction){
+        if(dotsPlaced > 5) PWM_CMP_RIGHT = pwmFrac;
+        if(dotsPlaced == CIRCLE_LED_COUNT) PWM_CMP_LEFT = pwmFrac;
+    }
+    else{
+        if(dotsPlaced > 5) PWM_CMP_LEFT = pwmFrac;
+        if(dotsPlaced == CIRCLE_LED_COUNT) PWM_CMP_RIGHT = pwmFrac;
+    }
+
+    //fade out if full
+    if(dotsPlaced == CIRCLE_LED_COUNT){
+        fadeoutCounter++;
+        const uint8_t fadeoutPrescaler = 6;
+        if(fadeoutCounter >= fadeoutPrescaler){
+            fadeoutCounter = 0;
+            if(currentBrightness == 0){
+                //restart
+                dotsPlaced = 0;
+                thisDotPos = (direction) ? 0 : CIRCLE_LED_COUNT - 1;
+                currentBrightness = CIRCLE_PWM_DEPTH - 2;
+            }
+            else{
+                currentBrightness--;
+            }
+        }
+    }
+    else{
+        //if not full, move dot
+        uint8_t lastPlace = (direction) ? CIRCLE_LED_COUNT - 1 - dotsPlaced : dotsPlaced;
+        if(thisDotPos == lastPlace){
+            dotsPlaced++;
+            thisDotPos = (direction) ? 0 : CIRCLE_LED_COUNT - 1;
+        }
+        else{
+            thisDotPos+= (direction) ? 1 : -1;
+        }
+    }
+
+}
