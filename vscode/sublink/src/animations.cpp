@@ -10,8 +10,15 @@ uint16_t accumulatedMs = 0;
 uint16_t lastCounterVal = 0;
 
 uint8_t animVars[20]; //variables to hold animation states between animate() calls.
+const uint8_t maxModifiableVars = 3; //first maxModifiableVars may be modified by user via buttons
 uint8_t modState = 0; //for holding state of modification (which variable, if any, is currently being modified). 0 reserved for "not currently modifying anything" (-> can change anim)
+uint8_t modifiableVars = 0; //set by animation function to signify how many variables can be modified (starting at index 0).
+uint8_t animVarsMaximums[maxModifiableVars]; //this holds maximum values attainable by modifiable variables. Set by anim functions on first call
+uint8_t animVarsMinimums[maxModifiableVars]; //this holds minimum values attainable by modifiable variables. Set by anim functions on first call
 
+
+
+uint8_t msPerFrameModifiable = 1; //may be set to 0 by animation function to disallow modification of msPerFrame
 volatile uint16_t msPerFrame = 100;
 
 const void animateRunningDot(int first, int mod, int delta);
@@ -33,6 +40,9 @@ void enterAnimation(uint8_t anim){
     activeAnimation = anim;
     accumulatedMs = 0;
     accumulatedTicks = 0;
+    memset(animVarsMaximums, 1, sizeof(animVarsMaximums));
+    memset(animVarsMinimums, 0, sizeof(animVarsMinimums));
+    msPerFrameModifiable = 1;
     (*ap[activeAnimation])(1,0,0);
 }
 
@@ -53,44 +63,7 @@ void readTime(){
     lastCounterVal = thisTick;
 }
 
-void animate(){
-    readTime();
-    if(accumulatedMs > msPerFrame){
-        accumulatedMs -= msPerFrame;
-        (*ap[activeAnimation])(0,0,0);
-    }
-}
-
-void handleModButton(){
-    (*ap[activeAnimation])(0,1,0);
-}
-
-void handleModify(int value){
-    if(!modState){
-        const uint8_t animCount = sizeof(ap)/sizeof(ap[0]);
-        if(value > 0){
-            activeAnimation++;
-            if(activeAnimation >= animCount){
-                activeAnimation = 0;
-            }
-        }
-        else{
-            if(activeAnimation == 0){
-                activeAnimation = animCount - 1;
-            }
-            else{
-                activeAnimation -= 1;
-            }
-        }
-        enterAnimation(activeAnimation);
-    }
-    else{
-        //allow active animation to modify its variable
-        (*ap[activeAnimation])(0,0,value);
-    }
-}
-
-//Called by animate functions during modification
+//Called during modification
 void pwmsOnOff(uint8_t left, uint8_t right, uint8_t top){
     static uint8_t on = 1;
     on = !on;
@@ -113,21 +86,75 @@ void pwmsOnOff(uint8_t left, uint8_t right, uint8_t top){
     }
 }
 
+void animate(){
+    readTime();
+    if(accumulatedMs > msPerFrame){
+        accumulatedMs -= msPerFrame;
+        (*ap[activeAnimation])(0,0,0);
+        if(modState){
+            pwmsOnOff((modState == 1 || modState == 0xff), (modState == 2 || modState == 0xff), (modState == 3 || modState == 0xff));
+        }
+    }
+}
 
+void handleModButton(){
+    modState++;
+    if(modState > modifiableVars){
+        if(msPerFrameModifiable){
+            modState = 0xff;
+        }
+        else{
+            modState = 0;
+            PWM_CMP_LEFT = 0;
+            PWM_CMP_TOP = 0;
+            PWM_CMP_RIGHT = 0;
+        }
+    }
+}
 
-const void animateNothing(int init, int mod, int delta){
-    clearBuffer();
-    PWM_CMP_LEFT = 0;
-    PWM_CMP_TOP = 0;
-    PWM_CMP_RIGHT = 0;
+void handleModify(int value){
+    if(!modState){
+        const uint8_t animCount = sizeof(ap)/sizeof(ap[0]);
+        if(value > 0){
+            activeAnimation++;
+            if(activeAnimation >= animCount){
+                activeAnimation = 0;
+            }
+        }
+        else{
+            if(activeAnimation == 0){
+                activeAnimation = animCount - 1;
+            }
+            else{
+                activeAnimation -= 1;
+            }
+        }
+        enterAnimation(activeAnimation);
+    }
+    else{
+        if(modState == 0xff){
+            msPerFrame -= value*5; //invert here -- make it feel like controlling speed, not delay
+            if(msPerFrame < 10){
+                msPerFrame = 10;
+            }
+        }
+        else if(modState > 0){
+            uint8_t i = modState - 1;
+            int newVal = animVars[i] + value;
+            if(newVal <= animVarsMaximums[i] && newVal >= animVarsMinimums[i]){
+                animVars[i] = newVal;
+            }
+        }
+    }
 }
 
 
 
-#define position animVars[0]
-#define tailLen animVars[1]
-#define brightness animVars[2]
-#define direction animVars[3]
+
+#define tailLen animVars[0]
+#define brightness animVars[1]
+#define direction animVars[2]
+#define position animVars[3]
 const void animateRunningDot(int init, int mod, int delta){
 
     if(init){
@@ -136,39 +163,13 @@ const void animateRunningDot(int init, int mod, int delta){
         tailLen = 3;
         direction = 1;
         brightness = 5;
-        modState = 0;
+        modifiableVars = 3;
+        animVarsMaximums[0] = CIRCLE_LED_COUNT - 1;
+        animVarsMinimums[1] = 1;
+        animVarsMaximums[1] = CIRCLE_PWM_DEPTH;
         return;
     }
 
-    if(mod){
-        if(modState >= 4){
-            modState = 0;
-        }
-        else{
-            modState++;
-        }
-        return;
-    }
-
-    if(modState && delta != 0){
-        if(modState == 4){
-            int newMs = msPerFrame + 10*delta;
-            if(newMs < 10){
-                msPerFrame = 10;
-            }
-            else{
-                msPerFrame = newMs;
-            }
-        }
-        else{
-            int newVal = animVars[modState] + delta;
-            if(newVal < 0) newVal = 0;
-            if(modState == 1 && newVal > CIRCLE_LED_COUNT - 1) newVal = CIRCLE_LED_COUNT - 1;
-            if(modState == 2 && newVal > CIRCLE_PWM_DEPTH) newVal = CIRCLE_PWM_DEPTH;
-            if(modState == 3 && newVal > 1) newVal = 1;
-            animVars[modState] = newVal;
-        }
-    }
 
     int spos = position;
     int sdir = 1;
@@ -214,11 +215,7 @@ const void animateRunningDot(int init, int mod, int delta){
         }
     }
 
-    if(modState){
-        //flash pwm led if in modstate
-        pwmsOnOff((modState == 1 | modState == 4), (modState == 2 | modState == 4 ), (modState == 3 | modState == 4));
-    }
-    else{
+    if(!modState){
         //show pwm depending on position of dot
         uint8_t oldPos = position;
         uint16_t pwmFraction = ((uint8_t)(TIMER_TOP/(18*6))) * ((oldPos%6) + 1 );
@@ -249,49 +246,40 @@ const void animateRunningDot(int init, int mod, int delta){
 
 
 
-
-#define clockFaceSeconds animVars[0]
+#define slowPendulum animVars[0]
 #define clockFaceMultiples animVars[1]
 #define quarterSeconds animVars[2]
 #define direction animVars[3]
 #define index animVars[4]
+#define clockFaceSeconds animVars[5]
+#define slowCounter animVars[6]
 const void animatePendulumClock(int first, int mod, int delta){
     //quantized LUT from pi/2 down to 0, covering 1/4 second
     const uint8_t cosLUT[26] = {0, 0, 0, 0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15, 16, 18, 20, 21, 23, 24, 26};
     const uint8_t lutMax = sizeof(cosLUT) - 1;
 
     if(first){
-        msPerFrame = 20;
+        msPerFrame = 10;
         index = 0;
         direction = 1;
         quarterSeconds = 0;
         clockFaceSeconds = 0;
         clockFaceMultiples = 0;
+        slowPendulum = 1;
+        modifiableVars = 1;
+        msPerFrameModifiable = 0;
         return;
     }
 
-    if(mod){
-        if(modState == 0){
-            modState = 1;
+    if(slowPendulum){
+        if(!slowCounter){
+            slowCounter++;
+            return;
         }
         else{
-            modState = 0;
+            slowCounter = 0;
         }
-        return;
     }
-
-    if(delta != 0 && modState){
-        if(delta > 0){
-            msPerFrame = 20;
-        }
-        else{
-            msPerFrame = 10;
-        }
-        return;
-    }
-
-
-    //PORTB_OUT |= 0x1;
 
 
     //if control reached here, 10ms has elapsed since last time
@@ -312,7 +300,7 @@ const void animatePendulumClock(int first, int mod, int delta){
         //PORTB_OUT |= 0x01;
         direction = !direction;
         quarterSeconds++;
-        if(quarterSeconds == 1 || (msPerFrame == 20)){
+        if(quarterSeconds == 1 || (slowPendulum)){
             incrementSeconds = 1;
         }
     }
@@ -414,7 +402,7 @@ const void animatePendulumClock(int first, int mod, int delta){
         }
     }
 
-    if(modState == 0){
+    if(!modState){
         if(clockFaceMultiples > 0){
             PWM_CMP_LEFT = TIMER_TOP/60;
         }
@@ -436,9 +424,6 @@ const void animatePendulumClock(int first, int mod, int delta){
             PWM_CMP_TOP = 0;
         }
     }
-    else{
-        pwmsOnOff(1,1,1);
-    }
 
 }
 #undef clockFaceSeconds
@@ -446,18 +431,20 @@ const void animatePendulumClock(int first, int mod, int delta){
 #undef quarterSeconds 
 #undef direction 
 #undef index 
+#undef slowPendulum
+#undef slowCounter
 
 
-
-#define currentIntensity animVars[0]
-#define rising animVars[1]
-#define goToZero animVars[2]
+#define goToZero animVars[0]
+#define currentIntensity animVars[1]
+#define rising animVars[2]
 const void animatePulsingLight(int first, int mod, int delta){
     if(first){
         msPerFrame = 200;
         currentIntensity = 1;
         rising = 1;
         goToZero = 0;
+        modifiableVars = 1;
         return;
     }
     if(mod){
@@ -505,10 +492,7 @@ const void animatePulsingLight(int first, int mod, int delta){
     }
 
     //draw corners
-    if(modState){
-        pwmsOnOff(1,(modState > 1),(modState > 1));
-    }
-    else{
+    if(!modState){
         PWM_CMP_LEFT = PWM_CMP_RIGHT = PWM_CMP_TOP = currentIntensity*TIMER_TOP/60;
     }
 
@@ -520,9 +504,9 @@ const void animatePulsingLight(int first, int mod, int delta){
 
 
 
-#define dotsPlaced animVars[0]
-#define thisDotPos animVars[1]
-#define direction animVars[2]
+#define direction animVars[0]
+#define dotsPlaced animVars[1]
+#define thisDotPos animVars[2]
 #define fadeoutCounter animVars[3]
 #define currentBrightness animVars[4]
 const void animateStackingDots(int first, int mod, int delta){
@@ -533,6 +517,7 @@ const void animateStackingDots(int first, int mod, int delta){
         fadeoutCounter = 0;
         currentBrightness = CIRCLE_PWM_DEPTH - 1;
         PWM_CMP_LEFT = PWM_CMP_RIGHT = PWM_CMP_TOP = 0;
+        modifiableVars = 1;
         msPerFrame = 50;
     }
     //todo mod
@@ -552,15 +537,17 @@ const void animateStackingDots(int first, int mod, int delta){
         }
     }
 
-    uint16_t pwmFrac = currentBrightness*TIMER_TOP/60;
-    if(dotsPlaced > 11) PWM_CMP_TOP = pwmFrac;
-    if(direction){
-        if(dotsPlaced > 5) PWM_CMP_RIGHT = pwmFrac;
-        if(dotsPlaced == CIRCLE_LED_COUNT) PWM_CMP_LEFT = pwmFrac;
-    }
-    else{
-        if(dotsPlaced > 5) PWM_CMP_LEFT = pwmFrac;
-        if(dotsPlaced == CIRCLE_LED_COUNT) PWM_CMP_RIGHT = pwmFrac;
+    if(!modState){
+        uint16_t pwmFrac = currentBrightness*TIMER_TOP/60;
+        if(dotsPlaced > 11) PWM_CMP_TOP = pwmFrac;
+        if(direction){
+            if(dotsPlaced > 5) PWM_CMP_RIGHT = pwmFrac;
+            if(dotsPlaced == CIRCLE_LED_COUNT) PWM_CMP_LEFT = pwmFrac;
+        }
+        else{
+            if(dotsPlaced > 5) PWM_CMP_LEFT = pwmFrac;
+            if(dotsPlaced == CIRCLE_LED_COUNT) PWM_CMP_RIGHT = pwmFrac;
+        }
     }
 
     //fade out if full
@@ -593,3 +580,8 @@ const void animateStackingDots(int first, int mod, int delta){
     }
 
 }
+#undef direction 
+#undef dotsPlaced
+#undef thisDotPos
+#undef fadeoutCounter 
+#undef currentBrightness 
