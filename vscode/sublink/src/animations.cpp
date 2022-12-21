@@ -21,14 +21,14 @@ uint8_t animVarsMinimums[maxModifiableVars]; //this holds minimum values attaina
 uint8_t msPerFrameModifiable = 1; //may be set to 0 by animation function to disallow modification of msPerFrame
 volatile uint16_t msPerFrame = 100;
 
-const void animateRunningDot(int first, int mod, int delta);
-const void animatePendulumClock(int firts, int mod, int delta);
-const void animatePulsingLight(int first, int mod, int delta);
-const void animateStackingDots(int first, int mod, int delta);
+const void animateRunningDot(int first);
+const void animatePendulumClock(int firts);
+const void animatePulsingLight(int first);
+const void animateStackingDots(int first);
 
 //array of animation functions. When 1st argument is true, this is an inicialization call. When 2nd argument is true, this is a modButton call.
 //When 3rd argument is nonzero, this is a variable modification by value of 3rd argument.
-const void (*ap[]) (int, int, int) = {
+const void (*ap[]) (int) = {
     animateRunningDot,
     animatePendulumClock,
     animatePulsingLight,
@@ -43,7 +43,7 @@ void enterAnimation(uint8_t anim){
     memset(animVarsMaximums, 1, sizeof(animVarsMaximums));
     memset(animVarsMinimums, 0, sizeof(animVarsMinimums));
     msPerFrameModifiable = 1;
-    (*ap[activeAnimation])(1,0,0);
+    (*ap[activeAnimation])(1);
 }
 
 void readTime(){
@@ -90,7 +90,7 @@ void animate(){
     readTime();
     if(accumulatedMs > msPerFrame){
         accumulatedMs -= msPerFrame;
-        (*ap[activeAnimation])(0,0,0);
+        (*ap[activeAnimation])(0);
         if(modState){
             pwmsOnOff((modState == 1 || modState == 0xff), (modState == 2 || modState == 0xff), (modState == 3 || modState == 0xff));
         }
@@ -155,7 +155,7 @@ void handleModify(int value){
 #define brightness animVars[1]
 #define direction animVars[2]
 #define position animVars[3]
-const void animateRunningDot(int init, int mod, int delta){
+const void animateRunningDot(int init){
 
     if(init){
         msPerFrame = 100;
@@ -253,7 +253,7 @@ const void animateRunningDot(int init, int mod, int delta){
 #define index animVars[4]
 #define clockFaceSeconds animVars[5]
 #define slowCounter animVars[6]
-const void animatePendulumClock(int first, int mod, int delta){
+const void animatePendulumClock(int first){
     //quantized LUT from pi/2 down to 0, covering 1/4 second
     const uint8_t cosLUT[26] = {0, 0, 0, 0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15, 16, 18, 20, 21, 23, 24, 26};
     const uint8_t lutMax = sizeof(cosLUT) - 1;
@@ -438,35 +438,13 @@ const void animatePendulumClock(int first, int mod, int delta){
 #define goToZero animVars[0]
 #define currentIntensity animVars[1]
 #define rising animVars[2]
-const void animatePulsingLight(int first, int mod, int delta){
+const void animatePulsingLight(int first){
     if(first){
         msPerFrame = 200;
         currentIntensity = 1;
         rising = 1;
         goToZero = 0;
         modifiableVars = 1;
-        return;
-    }
-    if(mod){
-        if(modState == 3){
-            modState = 0;
-        }
-        else{
-            modState++;
-        }
-        return;
-    }
-    if(delta != 0){
-        if(modState == 1){
-            goToZero = !goToZero;
-        }
-        else if(modState == 2){
-            int newMs = msPerFrame + 10*delta;
-            if(newMs < 10){
-                newMs = 10;
-            }
-            msPerFrame = newMs;
-        }
         return;
     }
 
@@ -509,7 +487,7 @@ const void animatePulsingLight(int first, int mod, int delta){
 #define thisDotPos animVars[2]
 #define fadeoutCounter animVars[3]
 #define currentBrightness animVars[4]
-const void animateStackingDots(int first, int mod, int delta){
+const void animateStackingDots(int first){
     if(first){
         dotsPlaced = 0;
         thisDotPos = 0;
