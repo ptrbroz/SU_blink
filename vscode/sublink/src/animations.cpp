@@ -12,6 +12,7 @@ uint16_t lastCounterVal = 0;
 uint8_t animVars[20]; //variables to hold animation states between animate() calls.
 const uint8_t maxModifiableVars = 3; //first maxModifiableVars may be modified by user via buttons
 uint8_t modState = 0; //for holding state of modification (which variable, if any, is currently being modified). 0 reserved for "not currently modifying anything" (-> can change anim)
+const uint8_t modStateMs = 0xfe; //when modstate is this, the msPerFrame value is being modified
 uint8_t modifiableVars = 0; //set by animation function to signify how many variables can be modified (starting at index 0).
 uint8_t animVarsMaximums[maxModifiableVars]; //this holds maximum values attainable by modifiable variables. Set by anim functions on first call
 uint8_t animVarsMinimums[maxModifiableVars]; //this holds minimum values attainable by modifiable variables. Set by anim functions on first call
@@ -92,7 +93,7 @@ void animate(){
         accumulatedMs -= msPerFrame;
         (*ap[activeAnimation])(0);
         if(modState){
-            pwmsOnOff((modState == 1 || modState == 0xff), (modState == 2 || modState == 0xff), (modState == 3 || modState == 0xff));
+            pwmsOnOff((modState == 1 || modState == modStateMs), (modState == 2 || modState == modStateMs), (modState == 3 || modState == modStateMs));
         }
     }
 }
@@ -100,8 +101,8 @@ void animate(){
 void handleModButton(){
     modState++;
     if(modState > modifiableVars){
-        if(msPerFrameModifiable){
-            modState = 0xff;
+        if(msPerFrameModifiable && modState < modStateMs){
+            modState = modStateMs;
         }
         else{
             modState = 0;
@@ -132,7 +133,7 @@ void handleModify(int value){
         enterAnimation(activeAnimation);
     }
     else{
-        if(modState == 0xff){
+        if(modState == modStateMs){
             msPerFrame -= value*5; //invert here -- make it feel like controlling speed, not delay
             if(msPerFrame < 10){
                 msPerFrame = 10;
@@ -480,25 +481,32 @@ const void animatePulsingLight(int first){
 #undef goToZero 
 
 
-
+//TODO: This is bugged when modifiying direction...
 
 #define direction animVars[0]
 #define dotsPlaced animVars[1]
 #define thisDotPos animVars[2]
 #define fadeoutCounter animVars[3]
 #define currentBrightness animVars[4]
+#define lastDirection animVars[5]
 const void animateStackingDots(int first){
     if(first){
         dotsPlaced = 0;
         thisDotPos = 0;
         direction = 0;
+        lastDirection = direction;
         fadeoutCounter = 0;
         currentBrightness = CIRCLE_PWM_DEPTH - 1;
         PWM_CMP_LEFT = PWM_CMP_RIGHT = PWM_CMP_TOP = 0;
         modifiableVars = 1;
         msPerFrame = 50;
+        return;
     }
-    //todo mod
+
+    if(lastDirection != direction){
+        thisDotPos = (direction) ? 1 : CIRCLE_LED_COUNT - 1; //reset dot on direction change
+    }
+    lastDirection = direction;
     
     //draw first
     clearBuffer();
