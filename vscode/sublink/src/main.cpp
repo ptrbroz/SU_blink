@@ -24,8 +24,6 @@ void setup(){
   //pwm setup
   TCA0_SINGLE_CTRLA = (0x1) | (0x3 << 1); //enable, prescaler
   TCA0_SINGLE_CTRLB = (0x7 << 4); //enable compare channels 0 1 2 
-  //TCA0_SINGLE_CTRLB &= (0xff ^ (0x1 << 4)); //disable cmp 0 TODO REMOVE
-  //TCA0_SINGLE_CTRLB &= (0xff ^ (0x1 << 5)); //disable cmp 1 TODO REMOVE
   TCA0_SINGLE_CTRLB |= 0x3; // single slope pwm
   TCA0_SINGLE_PER = TIMER_TOP; //set top value
   PORTB_DIR |= (0x1|0x2|0x4); //set PB0 1 2 as output -- pwm pins
@@ -42,11 +40,14 @@ void loop(){
 
   uint8_t buttonStatePreviousLoop = 0;
   uint8_t buttonStateLast = 0;
-  uint16_t buttonDebounceCounter = 0;
+  uint8_t holdState = 0;
+  uint32_t buttonDebounceCounter = 0;
 
-  const uint16_t debounceVal = 10000;
+  const uint32_t debounceVal        =  10000;
+  const uint32_t holdDelayFirst     = 750000;
+  const uint32_t holdDelaySecond    = 330000;
 
-  enterAnimation(3);
+  enterAnimation(4);
 
   while(1){
     buttonDebounceCounter += TCA0_SINGLE_CNT;
@@ -54,6 +55,7 @@ void loop(){
     uint8_t buttonStateNow = (PORTA_IN & (0x7 << 1));
     if(buttonStateNow != buttonStatePreviousLoop){
       buttonDebounceCounter = 0;
+      holdState = 0;
     }
     buttonStatePreviousLoop = buttonStateNow;
 
@@ -71,12 +73,7 @@ void loop(){
       buttonDebounceCounter = 0;
     }
 
-    //PORTB_OUT ^= 0x1;
-
     animate();
-    //blinkEdge(1,1,1, 1000);
-
-    //PORTB_OUT |= 0x1;
 
     for(int i = 0; i<CIRCLE_LED_COUNT*CIRCLE_PWM_DEPTH; i+=1){
       uint8_t enableVal = circleEnableBuffer[i];

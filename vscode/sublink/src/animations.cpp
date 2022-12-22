@@ -10,7 +10,7 @@ uint16_t accumulatedMs = 0;
 uint16_t lastCounterVal = 0;
 
 uint8_t animVars[20]; //variables to hold animation states between animate() calls.
-const uint8_t maxModifiableVars = 3; //first maxModifiableVars may be modified by user via buttons
+const uint8_t maxModifiableVars = 5; //first maxModifiableVars may be modified by user via buttons
 uint8_t modState = 0; //for holding state of modification (which variable, if any, is currently being modified). 0 reserved for "not currently modifying anything" (-> can change anim)
 const uint8_t modStateMs = 0xfe; //when modstate is this, the msPerFrame value is being modified
 uint8_t modifiableVars = 0; //set by animation function to signify how many variables can be modified (starting at index 0).
@@ -26,6 +26,7 @@ const void animateRunningDot(int first);
 const void animatePendulumClock(int firts);
 const void animatePulsingLight(int first);
 const void animateStackingDots(int first);
+const void animateMarkerEraser(int first);
 
 //array of animation functions. When 1st argument is true, this is an inicialization call. When 2nd argument is true, this is a modButton call.
 //When 3rd argument is nonzero, this is a variable modification by value of 3rd argument.
@@ -33,7 +34,8 @@ const void (*ap[]) (int) = {
     animateRunningDot,
     animatePendulumClock,
     animatePulsingLight,
-    animateStackingDots
+    animateStackingDots,
+    animateMarkerEraser
 };
 
 
@@ -67,6 +69,15 @@ void readTime(){
 //Called during modification
 void pwmsOnOff(uint8_t left, uint8_t right, uint8_t top){
     static uint8_t on = 1;
+    static uint16_t prescaleCounter = 0;
+    uint16_t target = 100/msPerFrame;
+    prescaleCounter++;
+    if(prescaleCounter > target){
+        prescaleCounter = 0;
+    }
+    else{
+        return;
+    }
     on = !on;
     if(on == 0){
         PWM_CMP_LEFT = 0;
@@ -92,8 +103,12 @@ void animate(){
     if(accumulatedMs > msPerFrame){
         accumulatedMs -= msPerFrame;
         (*ap[activeAnimation])(0);
-        if(modState){
-            pwmsOnOff((modState == 1 || modState == modStateMs), (modState == 2 || modState == modStateMs), (modState == 3 || modState == modStateMs));
+        if(modState == modStateMs){
+            pwmsOnOff(1,1,1);
+        }
+        else if(modState){
+            uint8_t mod = modState % 3;
+            pwmsOnOff( (mod == 1) , (mod == 2), (mod == 0) || modState > 3);
         }
     }
 }
@@ -437,28 +452,32 @@ const void animatePendulumClock(int first){
 
 
 #define goToZero animVars[0]
-#define currentIntensity animVars[1]
-#define rising animVars[2]
+#define stopped animVars[1]
+#define currentIntensity animVars[2]
+#define rising animVars[3]
 const void animatePulsingLight(int first){
     if(first){
         msPerFrame = 200;
         currentIntensity = 1;
         rising = 1;
         goToZero = 0;
-        modifiableVars = 1;
+        stopped = 0;
+        modifiableVars = 2;
         return;
     }
 
-    if(rising){
-        currentIntensity++;
-        if(currentIntensity >= CIRCLE_PWM_DEPTH){
-            rising = 0;
+    if(!stopped){
+        if(rising){
+            currentIntensity++;
+            if(currentIntensity >= CIRCLE_PWM_DEPTH){
+                rising = 0;
+            }
         }
-    }
-    else{
-        currentIntensity--;
-        if(currentIntensity <= ((goToZero) ? 0 : 1)){
-            rising = 1;
+        else{
+            currentIntensity--;
+            if(currentIntensity <= ((goToZero) ? 0 : 1)){
+                rising = 1;
+            }
         }
     }
 
@@ -571,3 +590,147 @@ const void animateStackingDots(int first){
 #undef thisDotPos
 #undef fadeoutCounter 
 #undef currentBrightness 
+
+
+
+#define markerDir animVars[0]
+#define eraserDir animVars[1]
+#define markerPrescaler animVars[2]
+#define eraserPrescaler animVars[3]
+#define markerCounter animVars[4]
+#define eraserCounter animVars[5]
+#define markerPosition animVars[6]
+#define eraserPosition animVars[7]
+#define topBits animVars[8]
+#define leftBits animVars[9]
+#define rightBits animVars[10]
+const void animateMarkerEraser(int first){
+    if(first){
+        msPerFrame = 10;
+        modifiableVars = 4;
+        markerDir = 0;
+        eraserDir = 0;
+        markerPrescaler = 15;
+        eraserPrescaler = 15;
+        animVarsMaximums[2] = animVarsMaximums[3] = 0xff;
+        animVarsMinimums[2] = animVarsMinimums[3] = 1;
+
+        markerPosition = 0;
+        eraserPosition = CIRCLE_LED_COUNT - 1;
+        markerCounter = 0;
+        eraserCounter = 0;
+        topBits = 0;
+        leftBits = 0;
+        rightBits = 0;
+        clearBuffer();
+        return;
+    }
+
+    markerCounter++;
+    eraserCounter++;
+
+    uint8_t dotIntensity =  CIRCLE_PWM_DEPTH;
+    uint8_t markIntensity = 1;
+
+    if(markerCounter >= markerPrescaler){
+        markerCounter = 0;
+        //remove dot from marker position, leaving a mark
+        if(markerPosition != eraserPosition){
+            for(int i = markIntensity; i < CIRCLE_PWM_DEPTH; i++){
+                circleEnableBuffer[markerPosition*CIRCLE_PWM_DEPTH + i] = 0;
+            }
+        }
+
+        //increment / decrement marker position
+        markerPosition += (markerDir) ? 1 : -1;
+        if(markerPosition > 250){
+            markerPosition = CIRCLE_LED_COUNT - 1;
+        }
+        else if(markerPosition == CIRCLE_LED_COUNT){
+            markerPosition = 0;
+        }
+
+        //place dot at new position
+        for(int i = 0; i < CIRCLE_PWM_DEPTH; i++){
+            circleEnableBuffer[markerPosition*CIRCLE_PWM_DEPTH + i] = portEnableSequence[markerPosition];
+        }
+    }
+
+
+    if(eraserCounter >= eraserPrescaler){
+        eraserCounter = 0;
+        //remove dot from eraser position, leaving nothing
+        if(markerPosition != eraserPosition){
+            for(int i = 0; i < CIRCLE_PWM_DEPTH; i++){
+                circleEnableBuffer[eraserPosition*CIRCLE_PWM_DEPTH + i] = 0;
+            }
+        }
+
+        //increment / decrement marker position
+        eraserPosition += (eraserDir) ? 1 : -1;
+        if(eraserPosition > 250){
+            eraserPosition = CIRCLE_LED_COUNT - 1;
+        }
+        else if(eraserPosition == CIRCLE_LED_COUNT){
+            eraserPosition = 0;
+        }
+
+        //place dot at new position
+        for(int i = 0; i < CIRCLE_PWM_DEPTH; i++){
+            circleEnableBuffer[eraserPosition*CIRCLE_PWM_DEPTH + i] = portEnableSequence[eraserPosition];
+        }
+    }
+
+    //set bits under marker, reset under eraser
+    uint8_t markVal = (0x1 << markerPosition % 6);       
+    if(markerPosition < 6){
+        leftBits |= markVal;
+    }
+    else if(markerPosition < 12){
+        topBits |= markVal;
+    }
+    else{
+        rightBits |= markVal;
+    }
+
+    uint8_t eraseVal = ~(0x1 << eraserPosition % 6);
+    if(eraserPosition < 6){
+        leftBits &= eraseVal;
+    }
+    else if(eraserPosition< 12){
+        topBits &= eraseVal;
+    }
+    else{
+        rightBits &= eraseVal;
+    }
+
+    uint8_t topSum = 0;
+    uint8_t leftSum = 0;
+    uint8_t rightSum = 0;
+    for(uint8_t i = 0; i<6; i++){
+        topSum += (topBits >> i) & 0x1;
+        leftSum += (leftBits >> i) & 0x1;
+        rightSum += (rightBits >> i) & 0x1;
+    }
+
+
+
+    if(!modState){
+        PWM_CMP_LEFT = leftSum*TIMER_TOP/60;
+        PWM_CMP_TOP = topSum*TIMER_TOP/60;
+        PWM_CMP_RIGHT = rightSum*TIMER_TOP/60;
+    }
+
+}
+
+#undef markerDir 
+#undef eraserDir 
+#undef markerPrescaler 
+#undef eraserPrescaler 
+#undef markerCounter 
+#undef eraserCounter 
+#undef markerPosition
+#undef eraserPosition
+#undef topVal 
+#undef leftVal
+#undef rightVal 
