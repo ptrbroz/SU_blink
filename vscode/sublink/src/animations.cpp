@@ -149,9 +149,12 @@ void handleModify(int value){
     }
     else{
         if(modState == modStateMs){
-            msPerFrame -= value*5; //invert here -- make it feel like controlling speed, not delay
-            if(msPerFrame < 10){
+            int newMs = msPerFrame - value*5;//invert here -- make it feel like controlling speed, not delay
+            if(newMs< 10){
                 msPerFrame = 10;
+            }
+            else{
+                msPerFrame = (uint8_t) newMs;
             }
         }
         else if(modState > 0){

@@ -44,8 +44,7 @@ void loop(){
   uint32_t buttonDebounceCounter = 0;
 
   const uint32_t debounceVal        =  10000;
-  const uint32_t holdDelayFirst     = 750000;
-  const uint32_t holdDelaySecond    = 330000;
+  const uint32_t holdDelay          = 330000;
 
   enterAnimation(4);
 
@@ -59,21 +58,51 @@ void loop(){
     }
     buttonStatePreviousLoop = buttonStateNow;
 
-    if(buttonDebounceCounter > debounceVal){
-      if((!(buttonStateLast & 0x2)) && (buttonStateNow & 0x2)){ //butt 1 press - right
-        handleModify(-1);
+    if(holdState == 0){
+      if(buttonDebounceCounter > debounceVal){
+        if((!(buttonStateLast & 0x2)) && (buttonStateNow & 0x2)){ //butt 1 press - right
+          handleModify(-1);
+          holdState = 1;
+        }
+        else if((!(buttonStateLast & 0x4)) && (buttonStateNow & 0x4)){ //butt 1 press - mid 
+          handleModButton();
+        }
+        else if(!((buttonStateLast & 0x8)) && (buttonStateNow & 0x8)){ //butt 1 press - left
+          handleModify(1);
+          holdState = 1;
+        }
+        buttonStateLast  = buttonStateNow;
+        buttonDebounceCounter = 0;
       }
-      else if((!(buttonStateLast & 0x4)) && (buttonStateNow & 0x4)){ //butt 1 press - mid 
-        handleModButton();
+    }
+    else if(holdState < 3){
+      if(buttonDebounceCounter > holdDelay){
+        buttonDebounceCounter = 0;
+        holdState++;
+        //don't do modification on first delay
       }
-      else if(!((buttonStateLast & 0x8)) && (buttonStateNow & 0x8)){ //butt 1 press - left
-        handleModify(1);
+    }
+    else{
+      if(buttonDebounceCounter > holdDelay){
+        uint8_t multiplier = 1;
+        if(holdState < 10){
+          multiplier = 3;
+        }
+        else{
+          holdState++;
+        }
+        buttonDebounceCounter = 0;
+        if(buttonStateNow & 0x2){
+          handleModify(-1*multiplier);
+        }
+        else if(buttonStateNow & 0x8){
+          handleModify(1*multiplier);
+        }
       }
-      buttonStateLast  = buttonStateNow;
-      buttonDebounceCounter = 0;
     }
 
     animate();
+    //PORTB_OUT |= 0x1;
 
     for(int i = 0; i<CIRCLE_LED_COUNT*CIRCLE_PWM_DEPTH; i+=1){
       uint8_t enableVal = circleEnableBuffer[i];
