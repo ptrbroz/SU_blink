@@ -618,7 +618,7 @@ const void animateMarkerEraser(int first){
         animVarsMaximums[2] = animVarsMaximums[3] = 0xff;
         animVarsMinimums[2] = animVarsMinimums[3] = 1;
 
-        markerPosition = 0;
+        markerPosition = 9;
         eraserPosition = CIRCLE_LED_COUNT - 1;
         markerCounter = 0;
         eraserCounter = 0;

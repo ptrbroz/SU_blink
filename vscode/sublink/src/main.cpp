@@ -46,7 +46,7 @@ void loop(){
   const uint32_t debounceVal        =  10000;
   const uint32_t holdDelay          = 330000;
 
-  enterAnimation(4);
+  enterAnimation(0);
 
   while(1){
     buttonDebounceCounter += TCA0_SINGLE_CNT;
